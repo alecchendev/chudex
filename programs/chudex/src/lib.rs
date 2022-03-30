@@ -13,3 +13,15 @@ pub mod chudex {
 
 #[derive(Accounts)]
 pub struct Initialize {}
+
+/*
+Instrs
+- initialize - init pool metadata, constant k, fee calculation state
+- deposit (2-sided) - transfer tokens to pool, mint LP token
+- withdraw (2-sided) - burn LP token, transfer tokens from pool
+
+State
+- Pool metadata
+- Pool tx state for fee calculation
+
+*/
