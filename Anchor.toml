@@ -1,13 +1,13 @@
 [features]
 seeds = false
-[programs.localnet]
-chudex = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+[programs.devnet]
+chudex = "BqaAuVM2Bj7Lnsq3VPorVuq5u57gwEz3F4dna72q6M3s"
 
 [registry]
 url = "https://anchor.projectserum.com"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/Users/alecchen/.config/solana/id.json"
 
 [scripts]

@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::{associated_token::{AssociatedToken}, token::{Token, TokenAccount, Mint}, mint};
 use std;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("BqaAuVM2Bj7Lnsq3VPorVuq5u57gwEz3F4dna72q6M3s");
 
 const FEE_START: u64 = 10; // start at 0.1% fees
 const FEE_DECIMALS: u8 = 5;
@@ -14,17 +14,33 @@ const TARGET_DEMAND: u64 = 100;
 const PRICE_CHANGE_DECIMALS: u8 = 4;
 
 const POOL_SEED: &[u8] = b"pool";
+const MINT_LP_SEED: &[u8] = b"mint_lp";
+
 
 #[program]
 pub mod chudex {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>, k: u64) -> Result<()> {
-        // init pool metadata - done
+        // vvv all done in accounts struct
+        // init pool metadata
         // init token a vault
-
         // init token b vault
         // init mint
+
+        // init pool metadata
+        let pool = Pool {
+            bump: *ctx.bumps.get("pool").unwrap(),
+            mint_a: ctx.accounts.mint_a.key(),
+            mint_b: ctx.accounts.mint_b.key(),
+            mint_lp: ctx.accounts.mint_lp.key(),
+            k: k,
+            fee: FEE_START,
+            record_index: 0,
+            records: [Record::default(); 16],
+        };
+        ctx.accounts.pool.set_inner(pool);
+
         Ok(())
     }
 
@@ -58,18 +74,19 @@ pub struct Initialize<'info> {
     // data accounts
     #[account(
         init,
-        space = 1 + 32 + 32 + 32 + 8 + 8 + 1 + 16 * (8 + 8),
+        space = 1 + 32 + 32 + 32 + 8 + 8 + 1 + 16 * (8 + 8) + 8, // discrim bytes..?
         payer = user,
-        seeds = [],
-        bump
+        seeds = [&POOL_SEED[..], mint_a.key().as_ref(), mint_b.key().as_ref()],
+        bump,
     )]
     pub pool: Account<'info, Pool>,
+
+    /// CHECK: shouldn't be initialized
     #[account(
-        seeds = [],
+        seeds = [&POOL_SEED[..], mint_b.key().as_ref(), mint_a.key().as_ref()],
         bump,
-        constraint = true, // length == 0
     )]
-    pub other_pool: Account<'info, Pool>,
+    pub other_pool: AccountInfo<'info>,
 
     #[account(
         init,
@@ -77,7 +94,7 @@ pub struct Initialize<'info> {
         associated_token::mint = mint_a,
         associated_token::authority = pool,
     )]
-    pub vault_a: Account<'info, TokenAccount>,
+    pub vault_a: Box<Account<'info, TokenAccount>>,
 
     #[account(
         init,
@@ -85,7 +102,7 @@ pub struct Initialize<'info> {
         associated_token::mint = mint_b,
         associated_token::authority = pool,
     )]
-    pub vault_b: Account<'info, TokenAccount>,
+    pub vault_b: Box<Account<'info, TokenAccount>>,
 
     #[account(
         owner = Token::id()
@@ -100,10 +117,12 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = user,
-        mint::decimals = std::cmp::max(mint_a.decimals, mint_b.decimals),
+        seeds = [&MINT_LP_SEED[..], pool.key().as_ref()],
+        bump,
         mint::authority = pool,
+        mint::decimals = std::cmp::max(mint_a.decimals, mint_b.decimals)
     )]
-    pub mint_lp: Account<'info, Mint>,
+    pub mint_lp: Box<Account<'info, Mint>>,
 
     // signers
     #[account(mut)]
