@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::{associated_token::{AssociatedToken}, token::{Token, TokenAccount, Mint}, mint};
+use anchor_spl::{associated_token::AssociatedToken, mint, token::*};
 use std;
 
 declare_id!("BqaAuVM2Bj7Lnsq3VPorVuq5u57gwEz3F4dna72q6M3s");
@@ -15,7 +15,6 @@ const PRICE_CHANGE_DECIMALS: u8 = 4;
 
 const POOL_SEED: &[u8] = b"pool";
 const MINT_LP_SEED: &[u8] = b"mint_lp";
-
 
 #[program]
 pub mod chudex {
@@ -45,9 +44,71 @@ pub mod chudex {
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+
+        let vault_a = &mut ctx.accounts.vault_a;
+        let vault_b = &mut ctx.accounts.vault_b;
+        let mint_a = &mut ctx.accounts.mint_a;
+        let mint_b = &mut ctx.accounts.mint_b;
+        let mint_lp = &mut ctx.accounts.mint_lp;
+
+        // calculate amounts
+        let amount_a = amount;
+        let amount_b: u64 =
+            ((vault_b.amount as f64) / (vault_a.amount as f64) * (amount_a as f64)) as u64;
+        let amount_lp = if mint_lp.supply == 0 { amount_a } else {((amount_a as f64) / (vault_a.amount as f64)
+            * (mint_lp.supply as f64)) as u64};
+        
+        // msg!("amount_a: {}", amount_a);
+        // msg!("amount_b: {}", amount_b);
+        // msg!("amount_lp: {}", amount_lp);
+
         // deposit token a
+        anchor_spl::token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info().clone(),
+                anchor_spl::token::Transfer {
+                    from: ctx.accounts.user_token_a.to_account_info().clone(),
+                    to: ctx.accounts.vault_a.to_account_info().clone(),
+                    authority: ctx.accounts.user.to_account_info().clone(),
+                },
+            ),
+            amount_a,
+        )?;
+
         // deposit token b
+        anchor_spl::token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info().clone(),
+                anchor_spl::token::Transfer {
+                    from: ctx.accounts.user_token_b.to_account_info().clone(),
+                    to: ctx.accounts.vault_b.to_account_info().clone(),
+                    authority: ctx.accounts.user.to_account_info().clone(),
+                },
+            ),
+            amount_b,
+        )?;
+
+        // msg!("Transferred.");
+
         // mint lp tokens
+        anchor_spl::token::mint_to(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info().clone(),
+                anchor_spl::token::MintTo {
+                    mint: ctx.accounts.mint_lp.to_account_info().clone(),
+                    to: ctx.accounts.user_token_lp.to_account_info().clone(),
+                    authority: ctx.accounts.pool.to_account_info().clone(),
+                },
+            )
+            .with_signer(&[&[
+                &POOL_SEED[..],
+                mint_a.key().as_ref(),
+                mint_b.key().as_ref(),
+                &[ctx.accounts.pool.bump],
+            ]]),
+            amount_lp,
+        )?;
+
         Ok(())
     }
 
@@ -70,11 +131,10 @@ pub mod chudex {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-
     // data accounts
     #[account(
         init,
-        space = 1 + 32 + 32 + 32 + 8 + 8 + 1 + 16 * (8 + 8) + 8, // discrim bytes..?
+        space = 1 + 32 + 32 + 32 + 8 + 8 + 1 + 16 * (8 + 8) + 8, // final +8 for discrim bytes
         payer = user,
         seeds = [&POOL_SEED[..], mint_a.key().as_ref(), mint_b.key().as_ref()],
         bump,
@@ -120,7 +180,7 @@ pub struct Initialize<'info> {
         seeds = [&MINT_LP_SEED[..], pool.key().as_ref()],
         bump,
         mint::authority = pool,
-        mint::decimals = std::cmp::max(mint_a.decimals, mint_b.decimals)
+        mint::decimals = mint_a.decimals, //std::cmp::max(mint_a.decimals, mint_b.decimals)
     )]
     pub mint_lp: Box<Account<'info, Mint>>,
 
@@ -136,7 +196,79 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Deposit {}
+pub struct Deposit<'info> {
+    #[account(
+        seeds = [&POOL_SEED[..], mint_a.key().as_ref(), mint_b.key().as_ref()],
+        bump = pool.bump,
+    )]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint_a,
+        associated_token::authority = pool,
+    )]
+    pub vault_a: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint_b,
+        associated_token::authority = pool,
+    )]
+    pub vault_b: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        owner = Token::id(),
+        constraint = mint_a.key() == pool.mint_a
+    )]
+    pub mint_a: Account<'info, Mint>,
+
+    #[account(
+        owner = Token::id(),
+        constraint = mint_b.key() == pool.mint_b
+    )]
+    pub mint_b: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [&MINT_LP_SEED[..], pool.key().as_ref()],
+        bump,
+        constraint = mint_lp.key() == pool.mint_lp
+    )]
+    pub mint_lp: Box<Account<'info, Mint>>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint_a,
+        associated_token::authority = user,
+    )]
+    pub user_token_a: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint_b,
+        associated_token::authority = user,
+    )]
+    pub user_token_b: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = mint_lp,
+        associated_token::authority = user,
+    )]
+    pub user_token_lp: Box<Account<'info, TokenAccount>>,
+
+    // signers
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    // programs
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
 
 #[derive(Accounts)]
 pub struct Withdraw {}
