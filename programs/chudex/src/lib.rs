@@ -20,7 +20,7 @@ const MINT_LP_SEED: &[u8] = b"mint_lp";
 pub mod chudex {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, k: u64) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         // vvv all done in accounts struct
         // init pool metadata
         // init token a vault
@@ -33,7 +33,7 @@ pub mod chudex {
             mint_a: ctx.accounts.mint_a.key(),
             mint_b: ctx.accounts.mint_b.key(),
             mint_lp: ctx.accounts.mint_lp.key(),
-            k: k,
+            k: 0,
             fee: FEE_START,
             record_index: 0,
             records: [Record::default(); 16],
@@ -43,8 +43,9 @@ pub mod chudex {
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+    pub fn deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> Result<()> {
 
+        let pool = &mut ctx.accounts.pool;
         let vault_a = &mut ctx.accounts.vault_a;
         let vault_b = &mut ctx.accounts.vault_b;
         let mint_a = &mut ctx.accounts.mint_a;
@@ -52,15 +53,26 @@ pub mod chudex {
         let mint_lp = &mut ctx.accounts.mint_lp;
 
         // calculate amounts
-        let amount_a = amount;
-        let amount_b: u64 =
-            ((vault_b.amount as f64) / (vault_a.amount as f64) * (amount_a as f64)) as u64;
-        let amount_lp = if mint_lp.supply == 0 { amount_a } else {((amount_a as f64) / (vault_a.amount as f64)
-            * (mint_lp.supply as f64)) as u64};
-        
-        // msg!("amount_a: {}", amount_a);
-        // msg!("amount_b: {}", amount_b);
-        // msg!("amount_lp: {}", amount_lp);
+        let initial_deposit =
+            pool.k == 0 && vault_a.amount == 0 && vault_b.amount == 0 && mint_lp.supply == 0;
+        if initial_deposit {
+            // set initial price/ratio
+            pool.k = amount_a * amount_b;
+        } else {
+            // check if matches price/ratio
+            let current_ratio = (vault_a.amount as f64 / vault_b.amount as f64);
+            let proposed_ratio =
+                ((vault_a.amount + amount_a) as f64 / (vault_b.amount + amount_b) as f64);
+            let diff = (current_ratio - proposed_ratio).abs();
+            if diff > 0.001 {
+                return err!(ChudexError::AsymmetricLiquidity);
+            }
+        }
+        let amount_lp = if initial_deposit {
+            amount_a
+        } else {
+            ((amount_a as f64) / (vault_a.amount as f64) * (mint_lp.supply as f64)) as u64
+        };
 
         // deposit token a
         anchor_spl::token::transfer(
@@ -87,8 +99,6 @@ pub mod chudex {
             ),
             amount_b,
         )?;
-
-        // msg!("Transferred.");
 
         // mint lp tokens
         anchor_spl::token::mint_to(
@@ -198,6 +208,7 @@ pub struct Initialize<'info> {
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(
+        mut,
         seeds = [&POOL_SEED[..], mint_a.key().as_ref(), mint_b.key().as_ref()],
         bump = pool.bump,
     )]
@@ -295,14 +306,8 @@ pub struct Record {
     price_change: u64, // out of 10 ** PRICE_CHANGE_DECIMALS
 }
 
-/*
-Instrs
-- initialize - init pool metadata, constant k, fee calculation state
-- deposit (2-sided) - transfer tokens to pool, mint LP token
-- withdraw (2-sided) - burn LP token, transfer tokens from pool
-
-State
-- Pool metadata
-- Pool tx state for fee calculation
-
-*/
+#[error_code]
+pub enum ChudexError {
+    #[msg("Deposit liquidity amounts don't match current supply ratio.")]
+    AsymmetricLiquidity
+}
