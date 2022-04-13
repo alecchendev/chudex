@@ -175,7 +175,8 @@ pub struct Initialize<'info> {
     pub vault_b: Box<Account<'info, TokenAccount>>,
 
     #[account(
-        owner = Token::id()
+        owner = Token::id(),
+        constraint = mint_a.key() != mint_b.key(),
     )]
     pub mint_a: Account<'info, Mint>,
 
@@ -230,7 +231,7 @@ pub struct Deposit<'info> {
 
     #[account(
         owner = Token::id(),
-        constraint = mint_a.key() == pool.mint_a
+        constraint = mint_a.key() == pool.mint_a,
     )]
     pub mint_a: Account<'info, Mint>,
 
