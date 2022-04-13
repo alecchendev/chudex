@@ -17,7 +17,6 @@ async function createWallet(provider: Provider, lamports: number): Promise<web3.
 
   // const signedFundTx = await provider.wallet.signTransaction(fundTx);
   const response = await provider.send(fundTx);
-
   // await this.sendAndConfirmTransaction(fundTx, [this.authority]);
   return wallet;
 }
@@ -35,102 +34,7 @@ async function createToken(
       decimals,
       TOKEN_PROGRAM_ID
   );
-
   return token;
-}
-
-type AllAccounts = {
-  user: Keypair,
-  mintA: Token,
-  mintB: Token,
-  mintLp: PublicKey,
-  vaultA: PublicKey,
-  vaultB: PublicKey,
-  userTokenA: PublicKey,
-  userTokenB: PublicKey,
-  userTokenLp: PublicKey,
-  pool: PublicKey,
-  otherPool: PublicKey
-}
-
-async function getAccounts(
-  provider: Provider,
-  programId: web3.PublicKey,
-): Promise<AllAccounts> {
-  const user = await createWallet(provider, 2 * (10 ** 7));
-  const mintA = await createToken(user, provider, 9);
-  const mintB = await createToken(user, provider, 6);
-
-  const [pool, poolBump] = await web3.PublicKey.findProgramAddress(
-    [
-      Buffer.from("pool"),
-      mintA.publicKey.toBuffer(),
-      mintB.publicKey.toBuffer(),
-    ],
-    programId,
-  );
-
-  const [otherPool, otherBump] = await web3.PublicKey.findProgramAddress(
-    [
-      Buffer.from("pool"),
-      mintB.publicKey.toBuffer(),
-      mintA.publicKey.toBuffer(),
-    ],
-    programId,
-  );
-
-  const [mintLp, mintLpBump ] = await web3.PublicKey.findProgramAddress(
-    [
-      Buffer.from("mint_lp"),
-      pool.toBuffer(),
-    ],
-    programId,
-  );
-
-  const vaultA = await Token.getAssociatedTokenAddress(
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    TOKEN_PROGRAM_ID,
-    mintA.publicKey,
-    pool,
-    true,
-  );
-
-  const vaultB = await Token.getAssociatedTokenAddress(
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    TOKEN_PROGRAM_ID,
-    mintB.publicKey,
-    pool,
-    true,
-  );
-
-  const userTokenA = await mintA.createAssociatedTokenAccount(
-    user.publicKey
-  );
-
-  const userTokenB = await mintB.createAssociatedTokenAccount(
-    user.publicKey
-  );
-
-  const userTokenLp = await Token.getAssociatedTokenAddress(
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    TOKEN_PROGRAM_ID,
-    mintLp,
-    user.publicKey,
-  );
-
-  return {
-    user,
-    mintA,
-    mintB,
-    mintLp,
-    vaultA,
-    vaultB,
-    userTokenA,
-    userTokenB,
-    userTokenLp,
-    pool,
-    otherPool,
-  };
 }
 
 describe("chudex", async () => {
@@ -248,42 +152,6 @@ describe("chudex", async () => {
   });
 
   it("Deposit", async () => {
-    // await program.provider.connection.requestAirdrop(user.publicKey, 2e9);
-    // const {
-    //   // user,
-    //   mintA,
-    //   mintB,
-    //   mintLp,
-    //   vaultA,
-    //   vaultB,
-    //   userTokenA,
-    //   userTokenB,
-    //   userTokenLp,
-    //   pool,
-    //   otherPool,
-    // } = await getAccounts(program.provider, program.programId);
-
-    // // Add your test here.
-    // let tx = await program.rpc.initialize(
-    //   {
-    //     accounts:{
-    //       pool: pool,
-    //       otherPool: otherPool,
-    //       vaultA: vaultA,
-    //       vaultB: vaultB,
-    //       mintA: mintA.publicKey,
-    //       mintB: mintB.publicKey,
-    //       mintLp: mintLp,
-    //       user: user.publicKey,
-    //       tokenProgram: TOKEN_PROGRAM_ID,
-    //       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-    //       systemProgram: web3.SystemProgram.programId,
-    //       rent: web3.SYSVAR_RENT_PUBKEY,
-    //     },
-    //     signers: [ user ]
-    //   }
-    // );
-
     await mintA.mintTo(userTokenA, user, [], 1 * (10 ** 9));
     await mintB.mintTo(userTokenB, user, [], 1 * (10 ** 6));
 
@@ -297,8 +165,6 @@ describe("chudex", async () => {
           pool: pool,
           vaultA: vaultA,
           vaultB: vaultB,
-          mintA: mintA.publicKey,
-          mintB: mintB.publicKey,
           mintLp: mintLp,
           userTokenA: userTokenA,
           userTokenB: userTokenB,
@@ -324,6 +190,48 @@ describe("chudex", async () => {
     expect(new anchor.BN(vaultAState.amount).toNumber()).to.equal(amountA);
     expect(new anchor.BN(vaultBState.amount).toNumber()).to.equal(amountB);
     expect(parseInt(userTokenLpState.tokenAmount.amount)).to.equal(amountA);
+
+  });
+
+  it("Withdraw", async () => {
+    await mintA.mintTo(userTokenA, user, [], 1 * (10 ** 9));
+    await mintB.mintTo(userTokenB, user, [], 1 * (10 ** 6));
+
+    const amount = 3000;
+    let tx = await program.rpc.withdraw(
+      new anchor.BN(amount),
+      {
+        accounts:{
+          pool: pool,
+          vaultA: vaultA,
+          vaultB: vaultB,
+          mintA: mintA.publicKey,
+          mintB: mintB.publicKey,
+          mintLp: mintLp,
+          userTokenA: userTokenA,
+          userTokenB: userTokenB,
+          userTokenLp: userTokenLp,
+          user: user.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: web3.SystemProgram.programId,
+          rent: web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [ user ]
+      }
+    );
+    console.log("Your transaction signature", tx);
+
+    let vaultAState = await mintA.getAccountInfo(vaultA);
+    let vaultBState = await mintB.getAccountInfo(vaultB);
+    let userTokenLpState = (await program.provider.connection.getParsedTokenAccountsByOwner(user.publicKey, { mint: mintLp })).value[0].account.data.parsed.info;
+    console.log("vaultA amount:", vaultAState.amount);
+    console.log("vaultB amount:", vaultBState.amount);
+    console.log("userTokenLp amount:", userTokenLpState.tokenAmount.amount);
+
+    // expect(new anchor.BN(vaultAState.amount).toNumber()).to.equal(amountA);
+    // expect(new anchor.BN(vaultBState.amount).toNumber()).to.equal(amountB);
+    // expect(parseInt(userTokenLpState.tokenAmount.amount)).to.equal(amountA);
 
   });
 });

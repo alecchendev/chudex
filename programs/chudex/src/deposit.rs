@@ -14,8 +14,6 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
     let pool = &mut ctx.accounts.pool;
     let vault_a = &mut ctx.accounts.vault_a;
     let vault_b = &mut ctx.accounts.vault_b;
-    let mint_a = &mut ctx.accounts.mint_a;
-    let mint_b = &mut ctx.accounts.mint_b;
     let mint_lp = &mut ctx.accounts.mint_lp;
 
     // calculate amounts
@@ -66,6 +64,7 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
         amount_b,
     )?;
 
+    let pool = &ctx.accounts.pool; // no longer borrow as mutable
     // mint lp tokens
     anchor_spl::token::mint_to(
         CpiContext::new(
@@ -78,8 +77,8 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
         )
         .with_signer(&[&[
             &POOL_SEED[..],
-            mint_a.key().as_ref(),
-            mint_b.key().as_ref(),
+            pool.mint_a.clone().as_ref(),
+            pool.mint_b.clone().as_ref(),
             &[ctx.accounts.pool.bump],
         ]]),
         amount_lp,
@@ -95,36 +94,24 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
 pub struct Deposit<'info> {
     #[account(
         mut,
-        seeds = [&POOL_SEED[..], mint_a.key().as_ref(), mint_b.key().as_ref()],
+        seeds = [&POOL_SEED[..], pool.mint_a.as_ref(), pool.mint_b.as_ref()],
         bump = pool.bump,
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
         mut,
-        associated_token::mint = mint_a,
+        associated_token::mint = pool.mint_a,
         associated_token::authority = pool,
     )]
     pub vault_a: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = mint_b,
+        associated_token::mint = pool.mint_b,
         associated_token::authority = pool,
     )]
     pub vault_b: Box<Account<'info, TokenAccount>>,
-
-    #[account(
-        owner = Token::id(),
-        constraint = mint_a.key() == pool.mint_a,
-    )]
-    pub mint_a: Account<'info, Mint>,
-
-    #[account(
-        owner = Token::id(),
-        constraint = mint_b.key() == pool.mint_b
-    )]
-    pub mint_b: Account<'info, Mint>,
 
     #[account(
         mut,
@@ -136,14 +123,14 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        associated_token::mint = mint_a,
+        associated_token::mint = pool.mint_a,
         associated_token::authority = user,
     )]
     pub user_token_a: Box<Account<'info, TokenAccount>>,
 
     #[account(
         mut,
-        associated_token::mint = mint_b,
+        associated_token::mint = pool.mint_b,
         associated_token::authority = user,
     )]
     pub user_token_b: Box<Account<'info, TokenAccount>>,
