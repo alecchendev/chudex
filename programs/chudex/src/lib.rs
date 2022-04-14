@@ -43,13 +43,14 @@ pub mod chudex {
 
 pub mod constants {
     pub const FEE_START: u64 = 10; // start at 0.1% fees
-    pub const FEE_DECIMALS: u8 = 5;
+    pub const DECIMAL_BASE: u64 = 10;
+    pub const FEE_DECIMALS: u32 = 5;
 
     pub const FEE_MIN: u64 = 1;
     pub const FEE_MAX: u64 = 200;
 
     pub const TARGET_DEMAND: u64 = 100;
-    pub const PRICE_CHANGE_DECIMALS: u8 = 4;
+    pub const PRICE_CHANGE_DECIMALS: u32 = 4;
 
     pub const POOL_SEED: &[u8] = b"pool";
     pub const MINT_LP_SEED: &[u8] = b"mint_lp";
