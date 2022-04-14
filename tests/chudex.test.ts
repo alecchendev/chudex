@@ -181,11 +181,12 @@ describe("chudex", async () => {
     console.log("Your transaction signature", tx);
 
     let vaultAState = await mintA.getAccountInfo(vaultA);
-    // console.log("vaultA amount:", vaultAState.amount);
     let vaultBState = await mintB.getAccountInfo(vaultB);
-    // console.log("vaultB amount:", vaultBState.amount);
     let userTokenLpState = (await program.provider.connection.getParsedTokenAccountsByOwner(user.publicKey, { mint: mintLp })).value[0].account.data.parsed.info;
-    // console.log("userTokenLp amount:", userTokenLpState.tokenAmount.amount);
+
+    console.log("vaultA amount:", new anchor.BN(vaultAState.amount).toNumber());
+    console.log("vaultB amount:", new anchor.BN(vaultBState.amount).toNumber());
+    console.log("userTokenLp amount:", userTokenLpState.tokenAmount.amount);
 
     expect(new anchor.BN(vaultAState.amount).toNumber()).to.equal(amountA);
     expect(new anchor.BN(vaultBState.amount).toNumber()).to.equal(amountB);
@@ -225,8 +226,8 @@ describe("chudex", async () => {
     let vaultAState = await mintA.getAccountInfo(vaultA);
     let vaultBState = await mintB.getAccountInfo(vaultB);
     let userTokenLpState = (await program.provider.connection.getParsedTokenAccountsByOwner(user.publicKey, { mint: mintLp })).value[0].account.data.parsed.info;
-    console.log("vaultA amount:", vaultAState.amount);
-    console.log("vaultB amount:", vaultBState.amount);
+    console.log("vaultA amount:", new anchor.BN(vaultAState.amount).toNumber());
+    console.log("vaultB amount:", new anchor.BN(vaultBState.amount).toNumber());
     console.log("userTokenLp amount:", userTokenLpState.tokenAmount.amount);
 
     // expect(new anchor.BN(vaultAState.amount).toNumber()).to.equal(amountA);

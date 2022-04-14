@@ -84,6 +84,8 @@ pub mod error {
     #[error_code]
     pub enum ChudexError {
         #[msg("Deposit liquidity amounts don't match current supply ratio.")]
-        AsymmetricLiquidity
+        AsymmetricLiquidity,
+        #[msg("Don't have enough LP tokens to withdraw attempted amount.")]
+        InsufficientLpTokens,
     }
 }

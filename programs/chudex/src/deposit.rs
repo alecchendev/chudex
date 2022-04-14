@@ -16,14 +16,10 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
     let vault_b = &mut ctx.accounts.vault_b;
     let mint_lp = &mut ctx.accounts.mint_lp;
 
-    // calculate amounts
+    // check if deposit matches current price/ratio
     let initial_deposit =
         pool.k == 0 && vault_a.amount == 0 && vault_b.amount == 0 && mint_lp.supply == 0;
-    if initial_deposit {
-        // set initial price/ratio
-        pool.k = amount_a * amount_b;
-    } else {
-        // check if matches price/ratio
+    if !initial_deposit {
         let current_ratio = (vault_a.amount as f64 / vault_b.amount as f64);
         let proposed_ratio =
             ((vault_a.amount + amount_a) as f64 / (vault_b.amount + amount_b) as f64);
@@ -32,6 +28,8 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
             return err!(ChudexError::AsymmetricLiquidity);
         }
     }
+
+    // calculate amount of LP token
     let amount_lp = if initial_deposit {
         amount_a
     } else {
@@ -83,6 +81,9 @@ pub fn process_deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> R
         ]]),
         amount_lp,
     )?;
+
+    // set new ratio
+    ctx.accounts.pool.k = ctx.accounts.vault_a.amount * ctx.accounts.vault_b.amount;
 
     Ok(())
 
